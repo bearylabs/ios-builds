@@ -39,9 +39,17 @@ rm "$RUNNER_TEMP/signing/certificate.p12"
 ditto -x -k "$RUNNER_TEMP/input/archive.zip" "$RUNNER_TEMP/signing"
 python3 "$GITHUB_WORKSPACE/scripts/export-options.py" \
   "$RUNNER_TEMP/signing/App.xcarchive" "$RUNNER_TEMP/signing/profiles" "$RUNNER_TEMP/signing/ExportOptions.plist"
+# An unsigned archive has no signed entitlements for Xcode to preserve. Seed
+# signatures with the reviewed capabilities before asking Xcode to re-export.
+python3 "$GITHUB_WORKSPACE/scripts/signing-entitlements.py" seed \
+  "$RUNNER_TEMP/signing/App.xcarchive" "$RUNNER_TEMP/signing/profiles" "$keychain"
 xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/signing/App.xcarchive" \
   -exportOptionsPlist "$RUNNER_TEMP/signing/ExportOptions.plist" \
   -exportPath "$RUNNER_TEMP/signed" | tee "$RUNNER_TEMP/export.log"
+# Fail closed before publication/upload if export dropped any required capability.
+while IFS= read -r -d '' ipa; do
+  python3 "$GITHUB_WORKSPACE/scripts/signing-entitlements.py" verify "$ipa"
+done < <(find "$RUNNER_TEMP/signed" -maxdepth 1 -name '*.ipa' -print0)
 # Publish only the IPA and public provenance, never profile ZIPs, keychains or archives.
 mkdir -p "$RUNNER_TEMP/deliverables"
 find "$RUNNER_TEMP/signed" -maxdepth 1 -name '*.ipa' -exec cp {} "$RUNNER_TEMP/deliverables/" \;

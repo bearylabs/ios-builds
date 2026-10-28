@@ -11,6 +11,10 @@ No Mac is needed on your desk.
 - Manually dispatched **unsigned**, **Ad Hoc** and **TestFlight** paths implemented.
 - Build and signing run on **separate ephemeral runners**. Source installation and
   build hooks do not receive Apple signing credentials.
+- Signing seeds the unsigned archive with reviewed App Group/Apple sign-in
+  entitlements before Xcode export, then checks the actual exported executable
+  signatures for every target. Valid profiles alone do not prove these
+  capabilities are present in the app.
 - **Archives, IPAs and signing diagnostics are age-encrypted before upload.**
   Only the public recipient exists on the build runner. Decryption requires the
   local identity or the identity in a protected signing environment.
