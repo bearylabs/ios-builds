@@ -1,0 +1,181 @@
+name: Build iOS app
+run-name: "${{ inputs.app }} · ${{ inputs.distribution }} · ${{ inputs.source_ref || 'pinned source' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Reviewed app manifest (apps/<name>.json)
+        type: choice
+        options: [openwhispr]
+        default: openwhispr
+        required: true
+      source_ref:
+        description: Source branch, tag or commit (empty uses pinned manifest commit)
+        type: string
+        default: ""
+      distribution:
+        description: Unsigned verifies build only; signed builds require a signing environment
+        type: choice
+        options: [unsigned, ad-hoc, testflight]
+        default: unsigned
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ inputs.app }}-${{ inputs.distribution }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Require reviewed default branch
+        env:
+          CURRENT_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DISTRIBUTION: ${{ inputs.distribution }}
+          SIGNING_ENABLED: ${{ vars.IOS_SIGNING_ENABLED }}
+        run: |
+          test "$CURRENT_REF" = "refs/heads/$DEFAULT_BRANCH"
+          if [ "$DISTRIBUTION" != unsigned ]; then
+            test "$SIGNING_ENABLED" = true || { echo 'Configure signing first, then set repository variable IOS_SIGNING_ENABLED=true'; exit 1; }
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Load reviewed app configuration
+        id: config
+        env:
+          APP: ${{ inputs.app }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: python3 scripts/config.py "$APP" --ref "$SOURCE_REF"
+      - name: Resolve source ref to immutable commit
+        id: source
+        env:
+          APP_CONFIG: ${{ steps.config.outputs.config }}
+          GH_TOKEN: ${{ secrets.SOURCE_READ_TOKEN || github.token }}
+          DISTRIBUTION: ${{ inputs.distribution }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.parse, urllib.request
+          config = json.loads(os.environ['APP_CONFIG'])
+          ref = urllib.parse.quote(config['ref'], safe='')
+          request = urllib.request.Request(
+              f'https://api.github.com/repos/{config["repository"]}/commits/{ref}',
+              headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}', 'Accept': 'application/vnd.github+json'},
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              sha = json.load(response)['sha']
+          assert re.fullmatch(r'[0-9a-f]{40}', sha)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'sha={sha}\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'### Source\n{config["repository"]}@`{sha}`\n\nDistribution: **{os.environ["DISTRIBUTION"]}**\n')
+          PY
+
+  build:
+    needs: resolve
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      CI: "true"
+      APP_CONFIG: ${{ needs.resolve.outputs.config }}
+      SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ fromJSON(needs.resolve.outputs.config).repository }}
+          token: ${{ secrets.SOURCE_READ_TOKEN || github.token }}
+          ref: ${{ needs.resolve.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - name: Select and verify Xcode
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH }}
+        run: bash control/scripts/select-xcode.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ fromJSON(needs.resolve.outputs.config).node }}
+      - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1
+        with:
+          ruby-version: ${{ fromJSON(needs.resolve.outputs.config).ruby }}
+          bundler: '2.4.14'
+      - name: Configure personal app identity and disable upstream OTA
+        run: node control/scripts/prepare-expo.cjs "source/$(python3 -c 'import json,os; print(json.loads(os.environ["APP_CONFIG"])["directory"])')"
+      - name: Build unsigned device archive (all extensions included)
+        run: bash control/scripts/build-expo.sh
+      - name: Upload archive and provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ inputs.app }}-unsigned-${{ needs.resolve.outputs.sha }}
+          path: |
+            ${{ runner.temp }}/output/archive.zip
+            ${{ runner.temp }}/output/build.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ inputs.app }}-build-log
+          path: ${{ runner.temp }}/output/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  sign:
+    if: inputs.distribution != 'unsigned'
+    needs: [resolve, build]
+    runs-on: macos-26
+    timeout-minutes: 30
+    environment: ios-${{ inputs.app }}-${{ inputs.distribution }}
+    env:
+      APP_CONFIG: ${{ needs.resolve.outputs.config }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      DISTRIBUTION: ${{ inputs.distribution }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Select and verify Xcode
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH }}
+        run: bash scripts/select-xcode.sh
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.app }}-unsigned-${{ needs.resolve.outputs.sha }}
+          path: ${{ runner.temp }}/input
+      - name: Sign and export IPA
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILES_ZIP_BASE64: ${{ secrets.IOS_PROFILES_ZIP_BASE64 }}
+        run: bash scripts/sign.sh
+      - name: Upload installable IPA
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ inputs.app }}-${{ inputs.distribution }}-${{ needs.resolve.outputs.sha }}
+          path: ${{ runner.temp }}/deliverables/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload to App Store Connect for TestFlight processing
+        if: inputs.distribution == 'testflight'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+        run: bash scripts/upload-testflight.sh
+      - name: Remove signing material
+        if: always()
+        run: bash scripts/cleanup-signing.sh

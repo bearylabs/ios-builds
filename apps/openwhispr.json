@@ -1,0 +1,13 @@
+{
+  "repository": "OpenWhispr/openwhispr",
+  "default_ref": "ec5852811c09cd7b76992fbbddaba49cc5acb523",
+  "directory": "openwhispr-mobile",
+  "adapter": "expo",
+  "scheme": "OpenWhispr",
+  "node": "24",
+  "ruby": "3.3",
+  "bundle_id": "com.bearylabs.openwhispr",
+  "display_name": "OpenWhispr Personal",
+  "url_scheme": "bearylabs-openwhispr",
+  "extension_suffixes": ["keyboard", "activity"]
+}
