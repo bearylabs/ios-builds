@@ -1,6 +1,6 @@
 {
-  "repository": "OpenWhispr/openwhispr",
-  "default_ref": "ec5852811c09cd7b76992fbbddaba49cc5acb523",
+  "repository": "bearylabs/openwhispr",
+  "default_ref": "fa34b9e1ea828dea0aceeadf04567675cd8e2b54",
   "directory": "openwhispr-mobile",
   "adapter": "expo",
   "scheme": "OpenWhispr",
