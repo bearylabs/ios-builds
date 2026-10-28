@@ -7,7 +7,7 @@
   "node": "24",
   "ruby": "3.3",
   "bundle_id": "com.bearylabs.openwhispr",
-  "display_name": "OpenWhispr Personal",
+  "display_name": "OpenWhispr",
   "url_scheme": "bearylabs-openwhispr",
   "extension_suffixes": ["keyboard", "activity"]
 }

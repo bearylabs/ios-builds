@@ -28,6 +28,7 @@ class ConfigTests(unittest.TestCase):
             'com.bearylabs.openwhispr.activity',
         ])
         self.assertEqual(len(config['default_ref']), 40)
+        self.assertEqual(config['display_name'], 'OpenWhispr')
 
     def test_reject_path_traversal(self):
         for app in ('../openwhispr', '/tmp/app', 'hello\nworld', 'app;echo nope'):
@@ -62,7 +63,10 @@ class ConfigTests(unittest.TestCase):
             self.assertNotIn('eas', result['extra'])
             self.assertEqual(result['ios']['appleTeamId'], 'NEW')
             self.assertEqual(result['updates'], {'enabled': False})
+            self.assertEqual(result['ios']['infoPlist']['CFBundleDisplayName'], 'OpenWhispr')
             self.assertIn('OPENWHISPR_IOS_BUNDLE_IDENTIFIER=com.bearylabs.openwhispr', env_file.read_text())
+            self.assertIn('OPENWHISPR_DISPLAY_NAME=OpenWhispr\n', env_file.read_text())
+            self.assertIn('OPENWHISPR_KEYBOARD_DISPLAY_NAME=OpenWhispr\n', env_file.read_text())
 
 
 class ProfileTests(unittest.TestCase):

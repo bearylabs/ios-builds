@@ -123,7 +123,7 @@ The disposable source checkout is wrapped with personal configuration:
 - Keyboard: `com.bearylabs.openwhispr.keyboard`
 - Live Activity: `com.bearylabs.openwhispr.activity`
 - App Group: `group.com.bearylabs.openwhispr`
-- Display name: `OpenWhispr Personal`
+- App and keyboard display name: `OpenWhispr` (matches upstream onboarding)
 - URL scheme: `bearylabs-openwhispr`
 
 Change the reviewed manifest before creating Apple identifiers if you prefer a
