@@ -4,6 +4,7 @@ __pycache__/
 .env
 .env.*
 downloads/
+*.agekey
 *.p8
 *.p12
 *.key

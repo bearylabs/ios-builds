@@ -10,4 +10,7 @@ if manifest.exists():
         Path(path).unlink(missing_ok=True)
     manifest.unlink()
 PY
-rm -rf "$RUNNER_TEMP/signing" "$HOME/.appstoreconnect/private_keys"
+rm -rf "$RUNNER_TEMP/signing" "$HOME/.appstoreconnect/private_keys" \
+  "$RUNNER_TEMP/input/archive.zip" "$RUNNER_TEMP/deliverables" "$RUNNER_TEMP/signed" \
+  "$RUNNER_TEMP/signing.log" "$RUNNER_TEMP/testflight.log" "$RUNNER_TEMP/export.log" \
+  "$RUNNER_TEMP/signing-diagnostics.zip"

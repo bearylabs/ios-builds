@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${APP_CONFIG:?}" "${SOURCE_SHA:?}" "${RUNNER_TEMP:?}"
+: "${APP_CONFIG:?}" "${SOURCE_SHA:?}" "${RUNNER_TEMP:?}" "${ARTIFACT_AGE_RECIPIENT:?}"
 app_dir=$(python3 -c 'import json,os; print(json.loads(os.environ["APP_CONFIG"])["directory"])')
 scheme=$(python3 -c 'import json,os; print(json.loads(os.environ["APP_CONFIG"])["scheme"])')
 cd "$GITHUB_WORKSPACE/source/$app_dir"
@@ -23,7 +23,9 @@ xcodebuild archive \
   | tee "$RUNNER_TEMP/output/xcodebuild.log"
 python3 "$GITHUB_WORKSPACE/control/scripts/archive.py" "$RUNNER_TEMP/output/App.xcarchive"
 ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/output/App.xcarchive" "$RUNNER_TEMP/output/archive.zip"
-rm -rf "$RUNNER_TEMP/output/App.xcarchive"
+age --encrypt --recipient "$ARTIFACT_AGE_RECIPIENT" \
+  --output "$RUNNER_TEMP/output/archive.zip.age" "$RUNNER_TEMP/output/archive.zip"
+rm -rf "$RUNNER_TEMP/output/App.xcarchive" "$RUNNER_TEMP/output/archive.zip"
 python3 - <<'PY'
 import json, os, subprocess
 from pathlib import Path
@@ -33,7 +35,7 @@ metadata = {
     'workflow_sha': os.environ.get('GITHUB_SHA'),
     'run': os.environ.get('GITHUB_RUN_ID'),
     'xcode': subprocess.check_output(['xcodebuild', '-version'], text=True).strip(),
-    'distribution': 'unsigned archive, NOT installable',
+    'distribution': 'age-encrypted unsigned archive, NOT installable',
 }
 Path(os.environ['RUNNER_TEMP'], 'output', 'build.json').write_text(json.dumps(metadata, indent=2))
 PY

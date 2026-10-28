@@ -89,13 +89,14 @@ gh variable set IOS_SIGNING_ENABLED --body false
 ```
 
 Environments `ios-openwhispr-ad-hoc` and `ios-openwhispr-testflight` are created as
-part of initial repository setup. In GitHub > Settings > Environments:
+part of initial repository setup. For this public repository both environments
+are restricted to `main` and require owner approval, with administrator bypass
+disabled. Self-review remains allowed so the single owner can approve their own
+manually dispatched builds. Keep these protections when adding environments.
 
-- Restrict deployment branches to `main`.
-- Add required reviewers **where your GitHub plan supports them**. Private-repo
-  environment protections vary by plan; an environment name alone is not an
-  approval gate. Without reviewers, only trusted maintainers should have write
-  access and signing remains an explicit manual dispatch.
+Artifact encryption is configured separately; see
+[ARTIFACT-ENCRYPTION.md](ARTIFACT-ENCRYPTION.md). Each signing environment also needs
+`ARTIFACT_AGE_IDENTITY`; only its public recipient is a repository variable.
 
 Install secrets using the CLI. The base64 examples below use Linux coreutils:
 
@@ -153,7 +154,8 @@ also grants Certificates, Identifiers & Profiles management access.
   Mode and unlock the device. An App Store/TestFlight IPA cannot be sideloaded by
   the Tailscale helper as an Ad Hoc build.
 - **Xcode/prebuild/native dependency error:** first reproduce with an unsigned
-  build, examine its log and the recorded source/Xcode versions. No dependency
-  patch should be approved solely to make a signing job green.
+  build, examine public Actions build logs and recorded source/Xcode versions.
+  Signing/upload diagnostics are encrypted artifacts; decrypt locally. No
+  dependency patch should be approved solely to make a signing job green.
 - **Upload succeeded, no TestFlight build:** inspect App Store Connect processing
   messages, compliance questions and version/build-number requirements.
